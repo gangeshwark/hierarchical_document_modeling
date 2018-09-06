@@ -187,9 +187,9 @@ def train(epochs, batch_size):
 
                 kernel_init = tf.glorot_uniform_initializer(seed=seed, dtype=tf.float32)
                 bias_init = tf.zeros_initializer()
-                word_cell = GRUCell(150, name='gru', activation=tf.nn.tanh,
+                word_cell = GRUCell(50, name='gru', activation=tf.nn.tanh,
                                     kernel_initializer=kernel_init, bias_initializer=bias_init)
-                sent_cell = GRUCell(150, name='gru', activation=tf.nn.tanh,
+                sent_cell = GRUCell(50, name='gru', activation=tf.nn.tanh,
                                     kernel_initializer=kernel_init, bias_initializer=bias_init)
 
                 model = HAN_Model(
@@ -215,7 +215,7 @@ def train(epochs, batch_size):
                 for epoch in range(epochs):
                     epoch += 1
 
-                    batches = batch_iter(zip(X_train, sent_length_train, word_length_train, y_train),
+                    batches = batch_iter(list(zip(X_train, sent_length_train, word_length_train, y_train)),
                                          batch_size)
 
                     # Training loop. For each batch...

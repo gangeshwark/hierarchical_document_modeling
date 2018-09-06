@@ -7,11 +7,6 @@ seed = 1224
 
 def BiGRU(cell_fw, cell_bw, inputs, seq_len, name, dropout_keep_rate):
     with tf.variable_scope('rnn_' + name, reuse=tf.AUTO_REUSE):
-        kernel_init = tf.glorot_uniform_initializer(seed=seed, dtype=tf.float32)
-        bias_init = tf.zeros_initializer()
-
-        # fw_cell = tf.contrib.rnn.GRUCell(output_size, name='gru', reuse=tf.AUTO_REUSE, activation=tf.nn.tanh,
-        #                                  kernel_initializer=kernel_init, bias_initializer=bias_init)
         cell_fw = tf.contrib.rnn.DropoutWrapper(cell_fw, output_keep_prob=dropout_keep_rate)
         cell_bw = tf.contrib.rnn.DropoutWrapper(cell_bw, output_keep_prob=dropout_keep_rate)
 

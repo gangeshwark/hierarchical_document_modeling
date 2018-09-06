@@ -5,10 +5,6 @@ from utils import task_specific_attention, BiGRU
 
 
 class HAN_Model():
-    """ Implementation of document classification model described in
-      `Hierarchical Attention Networks for Document Classification (Yang et al., 2016)`
-      (https://www.cs.cmu.edu/~diyiy/docs/naacl16.pdf)"""
-
     def __init__(self,
                  vocab_size,
                  embedding_size,
@@ -50,11 +46,11 @@ class HAN_Model():
          self.sentence_size,
          self.word_size) = tf.unstack(tf.shape(self.inputs))
 
-        self._init_embedding(scope)
-
         # embeddings cannot be placed on GPU
-        with tf.device(device):
-            self._init_body(scope)
+        with tf.device('/cpu:0'):
+            self._init_embedding(scope)
+
+        self._init_body(scope)
         self._init_train_op()
 
     def _init_embedding(self, scope):
@@ -70,53 +66,41 @@ class HAN_Model():
 
     def _init_body(self, scope):
         with tf.variable_scope(scope):
-            word_level_inputs = tf.reshape(self.inputs_embedded, [
-                self.document_size * self.sentence_size,
-                self.word_size,
-                self.embedding_size
-            ])
-            word_level_lengths = tf.reshape(
-                self.word_lengths, [self.document_size * self.sentence_size])
+            word_level_inputs = tf.reshape(self.inputs_embedded,
+                                           [self.document_size * self.sentence_size, self.word_size,
+                                            self.embedding_size])
+            word_level_lengths = tf.reshape(self.word_lengths, [self.document_size * self.sentence_size])
 
             with tf.variable_scope('word'):
-                word_encoder_output = BiGRU(
-                    self.word_cell, self.word_cell,
-                    word_level_inputs, word_level_lengths, name='word_BiRNN', dropout_keep_rate=self.dropout_keep_proba)
+                word_encoder_output = BiGRU(self.word_cell, self.word_cell, word_level_inputs, word_level_lengths,
+                                            name='word_BiRNN', dropout_keep_rate=self.dropout_keep_proba)
 
                 with tf.variable_scope('attention') as scope:
-                    word_level_output = task_specific_attention(
-                        word_encoder_output,
-                        self.word_output_size,
-                        scope=scope)
+                    word_level_output = task_specific_attention(word_encoder_output, self.word_output_size, scope=scope)
 
                 with tf.variable_scope('dropout'):
-                    word_level_output = layers.dropout(
-                        word_level_output, keep_prob=self.dropout_keep_proba,
-                        is_training=self.is_training)
+                    word_level_output = layers.dropout(word_level_output, keep_prob=self.dropout_keep_proba,
+                                                       is_training=self.is_training)
 
             # sentence_level
             sentence_inputs = tf.reshape(
                 word_level_output, [self.document_size, self.sentence_size, self.word_output_size])
 
             with tf.variable_scope('sentence'):
-                sentence_encoder_output = BiGRU(
-                    self.sentence_cell, self.sentence_cell,
-                    sentence_inputs, self.sentence_lengths, name='sentence_BiRNN',
-                    dropout_keep_rate=self.dropout_keep_proba)
+                sentence_encoder_output = BiGRU(self.sentence_cell, self.sentence_cell, sentence_inputs,
+                                                self.sentence_lengths, name='sentence_BiRNN',
+                                                dropout_keep_rate=self.dropout_keep_proba)
 
                 with tf.variable_scope('attention') as scope:
-                    sentence_level_output = task_specific_attention(
-                        sentence_encoder_output, self.sentence_output_size, scope=scope)
+                    sentence_level_output = task_specific_attention(sentence_encoder_output, self.sentence_output_size,
+                                                                    scope=scope)
 
                 with tf.variable_scope('dropout'):
-                    sentence_level_output = layers.dropout(
-                        sentence_level_output, keep_prob=self.dropout_keep_proba,
-                        is_training=self.is_training)
+                    sentence_level_output = layers.dropout(sentence_level_output, keep_prob=self.dropout_keep_proba,
+                                                           is_training=self.is_training)
 
             with tf.variable_scope('classifier'):
-                self.logits = layers.fully_connected(
-                    sentence_level_output, self.classes, activation_fn=None)
-
+                self.logits = layers.fully_connected(sentence_level_output, self.classes, activation_fn=None)
                 self.prediction = tf.argmax(self.logits, axis=-1)
 
     def _init_train_op(self):
@@ -129,9 +113,11 @@ class HAN_Model():
                 tf.cast(tf.equal(tf.argmax(self.logits, -1), tf.argmax(self.labels, -1)), tf.float32))
 
             train_vars = tf.trainable_variables()
+            reg_loss = []
             total_parameters = 0
             for train_var in train_vars:
                 # print(train_var.name)
+                reg_loss.append(tf.nn.l2_loss(train_var))
 
                 shape = train_var.get_shape()
                 variable_parameters = 1
@@ -140,8 +126,8 @@ class HAN_Model():
                 total_parameters += variable_parameters
             # print(total_parameters)
             print('Trainable parameters:', total_parameters)
+            self.loss = self.loss + 0.001 * tf.reduce_mean(reg_loss)
 
-            opt = tf.train.AdamOptimizer(self.lr)
+            opt = tf.train.AdamOptimizer(self.lr, beta1=0.9, beta2=0.999)
 
-            self.train_op = opt.minimize(self.loss, name='train_op',
-                                         global_step=self.global_step)
+            self.train_op = opt.minimize(self.loss, name='train_op', global_step=self.global_step)
